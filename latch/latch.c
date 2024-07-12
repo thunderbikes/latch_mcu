@@ -21,7 +21,8 @@
 
 
 /* Simple busy loop delay */
-void delay(unsigned long count) {
+void delay(unsigned long count)
+{
     while (count--)
         nop();
 }
@@ -30,6 +31,9 @@ int main(void)
 {
    	/*  Set clock to full speed (16 Mhz)  */
     CLK_CKDIVR = 0;
+    /*  setup latching vars for BMS and IMD, when they are non-zero, it will latch the value  */
+    unsigned int unlatched_bms;
+    unsigned int unlatched_imd;
     /*  Setup OUTPUTS */
     /* GPIO setup */
     // Set pin data direction as output
@@ -52,19 +56,60 @@ int main(void)
     */
 
     /*  Initial delay for letting the BMS and IMD reach steady state */
-    for (int i = 0; i < INIT_DELAY_COUNT; i++){
+    for (int i = 0; i < INIT_DELAY_COUNT; i++)
+    {
         delay(300000L);
     }
 
-	while(1) {
+    if (PORT(BMS_IN_PORT, IDR) & BMS_IN_PIN) // this is bit masking the BMS pin with the input value array (True if high?)
+    {
         PORT(BMS_OUT_PORT, ODR) |= BMS_OUT_PIN; // turn on
+        unlatched_bms = 1; // bms is not lachted
+    } 
+    else
+    {
+        PORT(BMS_OUT_PORT, ODR) &= BMS_OUT_PIN; //turn off
+        unlatched_bms = 0; // bms is lachted
+    }
+
+    if (PORT(IMD_OUT_PORT, IDR) & IMD_OUT_PIN) // this is bit masking the IMD pin with the input value array (True if high?)
+    {
+        PORT(IMD_OUT_PORT, ODR) |= IMD_OUT_PIN; // turn on
+        unlatched_imd = 1;
+    }
+    else
+    {
         PORT(IMD_OUT_PORT, ODR) &= IMD_OUT_PIN; //turn off
+        unlatched_imd = 0;
+    }
 
-        delay(300000L); // i don't know if we can know how long this delay is without more info
-
-        PORT(BMS_OUT_PORT, ODR) &= ~BMS_OUT_PIN; // PB_ODR &= ~(1 << 5);
-        PORT(IMD_OUT_PORT, ODR) |= IMD_OUT_PIN;
-
-        delay(300000L);
+	while(1)
+    {
+        if (unlatched_bms || (PORT(LATCH_RST_PORT, IDR) & LATCH_RST_PIN))
+        {
+            if (PORT(BMS_IN_PORT, IDR) & BMS_IN_PIN) // this is bit masking the BMS pin with the input value array (True if high?)
+            {
+                PORT(BMS_OUT_PORT, ODR) |= BMS_OUT_PIN; // turn on
+                unlatched_bms = 1;
+            } 
+            else
+            {
+                PORT(BMS_OUT_PORT, ODR) &= BMS_OUT_PIN; //turn off
+                unlatched_bms = 0;
+            }
+        }
+        if (unlatched_imd || (PORT(LATCH_RST_PORT, IDR) & LATCH_RST_PIN))
+        {
+            if (PORT(IMD_OUT_PORT, IDR) & IMD_OUT_PIN) // this is bit masking the IMD pin with the input value array (True if high?)
+            {
+                PORT(IMD_OUT_PORT, ODR) |= IMD_OUT_PIN; // turn on
+                unlatched_imd = 1;
+            }
+            else
+            {
+                PORT(IMD_OUT_PORT, ODR) &= IMD_OUT_PIN; //turn off
+                unlatched_imd = 0;
+            }
+        }
     }
 }
